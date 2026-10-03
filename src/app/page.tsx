@@ -86,18 +86,24 @@ export default async function Home() {
       {/* Statistik Section */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-16">
         <div className="bg-linear-to-r from-emerald-600 to-green-500 rounded-3xl p-8 md:p-12 shadow-xl text-white">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-8 text-center">
             <ScrollReveal direction="up" delay={0.1}>
               <div className="text-4xl md:text-5xl font-extrabold mb-2">
-                <AnimatedCounter value={totalAlumni > 0 ? totalAlumni : 520} />
+                <AnimatedCounter value={alumniPutraCount || 0} />
               </div>
-              <div className="text-emerald-100 font-medium">Total Alumni</div>
+              <div className="text-emerald-100 font-medium">Alumni Putra</div>
+            </ScrollReveal>
+            <ScrollReveal direction="up" delay={0.15}>
+              <div className="text-4xl md:text-5xl font-extrabold mb-2">
+                <AnimatedCounter value={alumniPutriCount || 0} />
+              </div>
+              <div className="text-emerald-100 font-medium">Alumni Putri</div>
             </ScrollReveal>
             <ScrollReveal direction="up" delay={0.2}>
               <div className="text-4xl md:text-5xl font-extrabold mb-2">
-                {settings?.kota_asal || "45+"}
+                8
               </div>
-              <div className="text-emerald-100 font-medium">Kota Asal</div>
+              <div className="text-emerald-100 font-medium">Korwil</div>
             </ScrollReveal>
             <ScrollReveal direction="up" delay={0.3}>
               <div className="text-4xl md:text-5xl font-extrabold mb-2">

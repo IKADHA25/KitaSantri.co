@@ -86,8 +86,9 @@ export default function Navbar() {
                     <Link href="/visi-misi" className="block px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-green-50 hover:text-green-600 transition-colors">
                       Visi & Misi
                     </Link>
-
-                  </div>
+                    <Link href="/struktur-pengurus" className="block px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-green-50 hover:text-green-600 transition-colors">
+                      Struktur Kepengurusan
+                    </Link>                  </div>
                 </div>
               )}
             </div>
@@ -188,8 +189,9 @@ export default function Navbar() {
               <Link href="/visi-misi" className="block px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:text-green-700 hover:bg-green-50 transition-colors">
                 Visi & Misi
               </Link>
-
-            </div>
+              <Link href="/struktur-pengurus" className="block px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:text-green-700 hover:bg-green-50 transition-colors">
+                Struktur Kepengurusan
+              </Link>            </div>
           </div>
 
           <Link href="/berita" className="block px-3 py-3 rounded-lg text-base font-semibold text-gray-600 hover:text-green-700 hover:bg-green-50 transition-colors">

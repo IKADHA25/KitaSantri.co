@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Data and Scripts
+*.csv
+process_csv.js
+generate_pengurus.js
+*.pdf

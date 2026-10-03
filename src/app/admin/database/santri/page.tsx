@@ -11,41 +11,68 @@ export default function DatabaseSantriPage() {
   
   // State untuk search
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   // State untuk Modal Tambah Data
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isAutoIdModalOpen, setIsAutoIdModalOpen] = useState(false);
+  const [autoIdPrefix, setAutoIdPrefix] = useState('IDA-25');
+  const [isFormatMenuOpen, setIsFormatMenuOpen] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
+    id_alumni: '',
     nama: '',
     alamat: '',
     korwil: '',
     aktivitas: 'Kuliah',
-    keterangan_aktivitas: ''
+    keterangan_aktivitas: '',
+    nomor_telpon: ''
   });
 
   // Fetch data dari Supabase
-  const fetchAlumni = async () => {
-    setLoading(true);
+  const fetchAlumni = async (isBackground = false) => {
+    if (!isBackground) setLoading(true);
     const tableName = kategori === 'Putra' ? 'alumni_putra' : 'alumni_putri';
     
     try {
       const { data: alumniData, error } = await supabase
         .from(tableName)
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('nama', { ascending: true });
         
       if (error) throw error;
       setData(alumniData || []);
     } catch (error) {
       console.error('Error fetching data:', error);
-      toast.error('Gagal mengambil data dari database.');
+      if (!isBackground) toast.error('Gagal mengambil data dari database.');
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchAlumni();
+
+    // Setup Supabase Realtime Subscription
+    const tableName = kategori === 'Putra' ? 'alumni_putra' : 'alumni_putri';
+    
+    const channel = supabase
+      .channel(`realtime-${tableName}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: tableName },
+        () => {
+          // Silent fetch on background so it doesn't flicker
+          fetchAlumni(true);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [kategori]);
 
   const filteredData = data.filter(item => 
@@ -53,41 +80,61 @@ export default function DatabaseSantriPage() {
     item.korwil?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleAddSubmit = async (e: React.FormEvent) => {
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [kategori, searchQuery]);
+
+  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+  const currentItems = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  const handleSaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     const tableName = kategori === 'Putra' ? 'alumni_putra' : 'alumni_putri';
 
     try {
-      const { error } = await supabase
-        .from(tableName)
-        .insert([formData]);
-
-      if (error) throw error;
+      if (editingId) {
+        // Edit mode
+        const { error } = await supabase
+          .from(tableName)
+          .update(formData)
+          .eq('id', editingId);
+        if (error) throw error;
+      } else {
+        // Add mode
+        const { error } = await supabase
+          .from(tableName)
+          .insert([formData]);
+        if (error) throw error;
+      }
+      
       
       // Reset form dan tutup modal
       setFormData({
+        id_alumni: '',
         nama: '',
         alamat: '',
         korwil: '',
         aktivitas: 'Kuliah',
-        keterangan_aktivitas: ''
+        keterangan_aktivitas: '',
+        nomor_telpon: ''
       });
       setIsAddModalOpen(false);
+      setEditingId(null);
       
       // Refresh data
       fetchAlumni();
-      toast.success('Data berhasil ditambahkan!');
+      toast.success(`Data berhasil ${editingId ? 'diperbarui' : 'ditambahkan'}!`);
     } catch (error) {
-      console.error('Error adding data:', error);
-      toast.error('Gagal menambahkan data.');
+      console.error('Error saving data:', error);
+      toast.error(`Gagal ${editingId ? 'memperbarui' : 'menambahkan'} data.`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleExportCSV = () => {
-    const headers = ['nama', 'alamat', 'korwil', 'aktivitas', 'keterangan_aktivitas'];
+    const headers = ['id_alumni', 'nama', 'alamat', 'korwil', 'nomor_telpon', 'aktivitas', 'keterangan_aktivitas'];
     const csvContent = [
       headers.join(','),
       ...data.map(row => 
@@ -106,8 +153,8 @@ export default function DatabaseSantriPage() {
   };
 
   const handleDownloadTemplate = () => {
-    const headers = ['nama', 'alamat', 'korwil', 'aktivitas', 'keterangan_aktivitas'];
-    const example = ['Ahmad Syaifulloh', 'Jl. Sudirman No 1', 'Madiun', 'Kuliah', 'Universitas Brawijaya'];
+    const headers = ['id_alumni', 'nama', 'alamat', 'korwil', 'nomor_telpon', 'aktivitas', 'keterangan_aktivitas'];
+    const example = ['REGIKADHA1', 'Ahmad Syaifulloh', 'Jl. Sudirman No 1', 'Madiun', '081234567890', 'Kuliah', 'Universitas Brawijaya'];
     const csvContent = [headers.join(','), example.map(v => `"${v}"`).join(',')].join('\n');
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -161,9 +208,11 @@ export default function DatabaseSantriPage() {
         cols.push(cur.trim()); // push last col
         
         rowsToInsert.push({
+          id_alumni: cols[headers.indexOf('id_alumni')] || '',
           nama: cols[headers.indexOf('nama')] || '',
           alamat: cols[headers.indexOf('alamat')] || '',
           korwil: cols[headers.indexOf('korwil')] || '',
+          nomor_telpon: cols[headers.indexOf('nomor_telpon')] || '',
           aktivitas: cols[headers.indexOf('aktivitas')] || 'Kuliah',
           keterangan_aktivitas: cols[headers.indexOf('keterangan_aktivitas')] || ''
         });
@@ -188,6 +237,90 @@ export default function DatabaseSantriPage() {
     };
     reader.readAsText(file);
     e.target.value = ''; // reset
+  };
+
+  const handleFormatName = async (format: 'uppercase' | 'titlecase') => {
+    if (!confirm(`Apakah Anda yakin ingin mengubah format nama seluruh data ${kategori} ke ${format === 'uppercase' ? 'KAPITAL SEMUA' : 'Awal Huruf Besar'}?`)) return;
+    
+    setLoading(true);
+    setIsFormatMenuOpen(false);
+    const tableName = kategori === 'Putra' ? 'alumni_putra' : 'alumni_putri';
+    
+    try {
+      const updates = data.map(item => {
+        let newName = item.nama || '';
+        if (format === 'uppercase') {
+          newName = newName.toUpperCase();
+        } else {
+          newName = newName.toLowerCase().replace(/\b\w/g, (s: string) => s.toUpperCase());
+        }
+        return { id: item.id, nama: newName };
+      });
+      
+      // Update batch
+      for (const update of updates) {
+        await supabase.from(tableName).update({ nama: update.nama }).eq('id', update.id);
+      }
+      
+      toast.success('Format nama berhasil diperbarui!');
+      fetchAlumni();
+    } catch (error) {
+      console.error('Error formatting names:', error);
+      toast.error('Gagal memformat nama.');
+      setLoading(false);
+    }
+  };
+
+  const executeGenerateID = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!autoIdPrefix) return;
+
+    setLoading(true);
+    setIsAutoIdModalOpen(false);
+    try {
+      // 1. Ambil semua data Putra urut abjad
+      const { data: putraData, error: errPutra } = await supabase
+        .from('alumni_putra')
+        .select('id, nama')
+        .order('nama', { ascending: true });
+      if (errPutra) throw errPutra;
+
+      // 2. Ambil semua data Putri urut abjad
+      const { data: putriData, error: errPutri } = await supabase
+        .from('alumni_putri')
+        .select('id, nama')
+        .order('nama', { ascending: true });
+      if (errPutri) throw errPutri;
+
+      let counter = 1;
+
+      // 3. Update Putra (urutan 1 sampai N)
+      for (const p of (putraData || [])) {
+        const formattedCounter = String(counter).padStart(3, '0');
+        await supabase
+          .from('alumni_putra')
+          .update({ id_alumni: `${autoIdPrefix}${formattedCounter}` })
+          .eq('id', p.id);
+        counter++;
+      }
+
+      // 4. Update Putri (urutan N+1 sampai selesai)
+      for (const p of (putriData || [])) {
+        const formattedCounter = String(counter).padStart(3, '0');
+        await supabase
+          .from('alumni_putri')
+          .update({ id_alumni: `${autoIdPrefix}${formattedCounter}` })
+          .eq('id', p.id);
+        counter++;
+      }
+
+      toast.success('ID Alumni berhasil dibuat ulang untuk semua data!');
+      fetchAlumni();
+    } catch (error) {
+      console.error('Error generating IDs:', error);
+      toast.error('Gagal membuat ulang ID Alumni.');
+      setLoading(false);
+    }
   };
 
   return (
@@ -232,12 +365,62 @@ export default function DatabaseSantriPage() {
           </button>
 
           <button 
-            onClick={() => setIsAddModalOpen(true)}
+            onClick={() => {
+              setEditingId(null);
+              setFormData({
+                id_alumni: '',
+                nama: '',
+                alamat: '',
+                korwil: '',
+                aktivitas: 'Kuliah',
+                keterangan_aktivitas: '',
+                nomor_telpon: ''
+              });
+              setIsAddModalOpen(true);
+            }}
             className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium transition-colors shadow-sm"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
             Tambah Data
           </button>
+          
+          <button 
+            onClick={() => setIsAutoIdModalOpen(true)}
+            className="flex items-center gap-2 bg-amber-50 hover:bg-amber-100 text-amber-700 px-3 py-2 rounded-lg font-medium transition-colors shadow-sm text-sm border border-amber-200"
+            title="Buat ulang ID Alumni secara otomatis"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/></svg>
+            Auto ID
+          </button>
+          
+          <div className="relative">
+            <button 
+              onClick={() => setIsFormatMenuOpen(!isFormatMenuOpen)}
+              className="flex items-center gap-2 bg-purple-50 hover:bg-purple-100 text-purple-700 px-3 py-2 rounded-lg font-medium transition-colors shadow-sm text-sm border border-purple-200"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m4 13 8-8 8 8"/><path d="M12 5v14"/></svg>
+              Format Nama
+            </button>
+            
+            {isFormatMenuOpen && (
+              <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-gray-100 z-10 overflow-hidden">
+                <div className="py-1">
+                  <button 
+                    onClick={() => handleFormatName('uppercase')}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-700"
+                  >
+                    Ubah ke KAPITAL SEMUA
+                  </button>
+                  <button 
+                    onClick={() => handleFormatName('titlecase')}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-700"
+                  >
+                    Ubah ke Awal Huruf Besar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -288,12 +471,14 @@ export default function DatabaseSantriPage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50 text-gray-600 text-sm border-b border-gray-200">
-                <th className="px-6 py-4 font-semibold">Nama</th>
-                <th className="px-6 py-4 font-semibold">Alamat</th>
-                <th className="px-6 py-4 font-semibold">Korwil</th>
-                <th className="px-6 py-4 font-semibold">Aktivitas</th>
-                <th className="px-6 py-4 font-semibold">Nama Kampus / Tempat Kerja</th>
-                <th className="px-6 py-4 font-semibold text-right">Aksi</th>
+                <th className="px-6 py-4 font-semibold whitespace-nowrap min-w-30">ID Alumni</th>
+                <th className="px-6 py-4 font-semibold whitespace-nowrap min-w-50">Nama</th>
+                <th className="px-6 py-4 font-semibold min-w-62.5">Alamat</th>
+                <th className="px-6 py-4 font-semibold whitespace-nowrap min-w-30">Korwil</th>
+                <th className="px-6 py-4 font-semibold whitespace-nowrap">No. Telp</th>
+                <th className="px-6 py-4 font-semibold whitespace-nowrap min-w-30">Aktivitas</th>
+                <th className="px-6 py-4 font-semibold min-w-50">Nama Kampus / Tempat Kerja</th>
+                <th className="px-6 py-4 font-semibold text-right whitespace-nowrap">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -310,18 +495,22 @@ export default function DatabaseSantriPage() {
                   </td>
                 </tr>
               ) : (
-                filteredData.map((item) => (
+                currentItems.map((item) => (
                   <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 font-medium text-gray-900">{item.nama}</td>
-                    <td className="px-6 py-4 text-gray-600 text-sm max-w-50 truncate" title={item.alamat}>
+                    <td className="px-6 py-4 font-medium text-gray-500 whitespace-nowrap text-sm">{item.id_alumni || '-'}</td>
+                    <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">{item.nama}</td>
+                    <td className="px-6 py-4 text-gray-600 text-sm max-w-62.5 truncate" title={item.alamat}>
                       {item.alamat}
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 whitespace-nowrap">
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
                         {item.korwil}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 text-gray-600 text-sm whitespace-nowrap">
+                      {item.nomor_telpon || '-'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                         item.aktivitas === 'Kuliah' 
                           ? 'bg-blue-100 text-blue-800' 
@@ -330,11 +519,27 @@ export default function DatabaseSantriPage() {
                         {item.aktivitas}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-gray-600 text-sm">
+                    <td className="px-6 py-4 text-gray-600 text-sm min-w-50">
                       {item.keterangan_aktivitas || '-'}
                     </td>
                     <td className="px-6 py-4 text-right whitespace-nowrap">
-                      <button className="text-gray-400 hover:text-emerald-600 transition-colors p-1" title="Edit">
+                      <button 
+                        onClick={() => {
+                          setEditingId(item.id);
+                          setFormData({
+                            id_alumni: item.id_alumni || '',
+                            nama: item.nama || '',
+                            alamat: item.alamat || '',
+                            korwil: item.korwil || '',
+                            aktivitas: item.aktivitas || 'Kuliah',
+                            keterangan_aktivitas: item.keterangan_aktivitas || '',
+                            nomor_telpon: item.nomor_telpon || ''
+                          });
+                          setIsAddModalOpen(true);
+                        }}
+                        className="text-gray-400 hover:text-emerald-600 transition-colors p-1" 
+                        title="Edit"
+                      >
                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
                       </button>
                       <button 
@@ -357,6 +562,85 @@ export default function DatabaseSantriPage() {
             </tbody>
           </table>
         </div>
+        
+        {/* Pagination UI */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6">
+            <div className="flex flex-1 justify-between sm:hidden">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+            <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm text-gray-700">
+                  Menampilkan <span className="font-medium">{((currentPage - 1) * itemsPerPage) + 1}</span> hingga <span className="font-medium">{Math.min(currentPage * itemsPerPage, filteredData.length)}</span> dari <span className="font-medium">{filteredData.length}</span> data
+                </p>
+              </div>
+              <div>
+                <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50"
+                  >
+                    <span className="sr-only">Previous</span>
+                    <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                      <path fillRule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                  
+                  {/* Page Numbers */}
+                  {[...Array(totalPages)].map((_, i) => {
+                    const page = i + 1;
+                    // Tampilkan maksimal 5 tombol halaman (logika sederhana)
+                    if (page === 1 || page === totalPages || (page >= currentPage - 1 && page <= currentPage + 1)) {
+                      return (
+                        <button
+                          key={page}
+                          onClick={() => setCurrentPage(page)}
+                          aria-current={currentPage === page ? 'page' : undefined}
+                          className={`relative inline-flex items-center px-4 py-2 text-sm font-semibold focus:z-20 focus:outline-offset-0 ${
+                            currentPage === page 
+                              ? 'z-10 bg-emerald-600 text-white focus-visible:outline focus-visible:outline-offset-2 focus-visible:outline-emerald-600' 
+                              : 'text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      );
+                    } else if (page === currentPage - 2 || page === currentPage + 2) {
+                      return <span key={page} className="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-700 ring-1 ring-inset ring-gray-300">...</span>;
+                    }
+                    return null;
+                  })}
+                  
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                    disabled={currentPage === totalPages}
+                    className="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50"
+                  >
+                    <span className="sr-only">Next</span>
+                    <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                      <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                </nav>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Modal Tambah Data */}
@@ -366,16 +650,30 @@ export default function DatabaseSantriPage() {
             
             {/* Close button */}
             <button 
-              onClick={() => setIsAddModalOpen(false)}
+              onClick={() => {
+                setIsAddModalOpen(false);
+                setEditingId(null);
+              }}
               className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-full p-2 transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
 
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Tambah Data Alumni {kategori}</h2>
-            <p className="text-sm text-gray-500 mb-6">Lengkapi form di bawah ini untuk menambahkan data alumni baru.</p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">{editingId ? 'Edit Data Alumni' : `Tambah Data Alumni ${kategori}`}</h2>
+            <p className="text-sm text-gray-500 mb-6">Lengkapi form di bawah ini untuk {editingId ? 'memperbarui' : 'menambahkan'} data alumni.</p>
             
-            <form onSubmit={handleAddSubmit} className="space-y-4">
+            <form onSubmit={handleSaveSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">ID Alumni</label>
+                <input 
+                  type="text" 
+                  value={formData.id_alumni}
+                  onChange={(e) => setFormData({...formData, id_alumni: e.target.value})}
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors"
+                  placeholder="Contoh: REGIKADHA1"
+                />
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Nama Lengkap</label>
                 <input 
@@ -385,6 +683,17 @@ export default function DatabaseSantriPage() {
                   onChange={(e) => setFormData({...formData, nama: e.target.value})}
                   className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors"
                   placeholder="Masukkan nama lengkap"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nomor Telepon</label>
+                <input 
+                  type="text" 
+                  value={formData.nomor_telpon}
+                  onChange={(e) => setFormData({...formData, nomor_telpon: e.target.value})}
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors"
+                  placeholder="Contoh: 081234567890"
                 />
               </div>
 
@@ -463,6 +772,83 @@ export default function DatabaseSantriPage() {
           </div>
         </div>
       )}
+
+      {/* Modal Auto ID */}
+      {isAutoIdModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overflow-x-hidden bg-black/40 backdrop-blur-sm p-4">
+          <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 md:p-8 animate-in fade-in zoom-in-95 duration-200">
+            
+            <button 
+              onClick={() => setIsAutoIdModalOpen(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-full p-2 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+
+            <div className="flex items-center gap-3 mb-2">
+              <div className="bg-amber-100 p-2.5 rounded-xl text-amber-600">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/></svg>
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900">Generate Auto ID</h2>
+            </div>
+            
+            <p className="text-sm text-gray-500 mb-6">Sistem akan menyinkronkan seluruh data Putra dan Putri secara alfabetis dengan penomoran otomatis berdigit 3 (contoh: 001, 002).</p>
+            
+            <form onSubmit={executeGenerateID} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Prefix ID (Awalan)</label>
+                <input 
+                  type="text" 
+                  value={autoIdPrefix}
+                  onChange={(e) => setAutoIdPrefix(e.target.value)}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all font-mono text-lg"
+                  placeholder="Contoh: IDA-25"
+                  required
+                />
+              </div>
+
+              <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-2">Preview (Pratinjau Hasil)</p>
+                <div className="space-y-2 font-mono text-sm">
+                  <div className="flex justify-between items-center text-gray-700">
+                    <span>1. Putra Pertama</span>
+                    <span className="font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded">{autoIdPrefix}001</span>
+                  </div>
+                  <div className="flex justify-between items-center text-gray-700">
+                    <span>2. Putra Kedua</span>
+                    <span className="font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded">{autoIdPrefix}002</span>
+                  </div>
+                  <div className="flex justify-between items-center text-gray-400">
+                    <span>...</span>
+                  </div>
+                  <div className="flex justify-between items-center text-gray-700">
+                    <span>Putri Selanjutnya</span>
+                    <span className="font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded">{autoIdPrefix}128</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 flex gap-3">
+                <button 
+                  type="button"
+                  onClick={() => setIsAutoIdModalOpen(false)}
+                  className="flex-1 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-medium transition-colors"
+                >
+                  Batal
+                </button>
+                <button 
+                  type="submit"
+                  disabled={loading || !autoIdPrefix}
+                  className="flex-1 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-medium transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {loading ? 'Sinkronisasi...' : 'Terapkan ID'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

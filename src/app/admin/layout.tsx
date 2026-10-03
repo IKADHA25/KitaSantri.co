@@ -120,6 +120,9 @@ export default function AdminLayout({
                 <Link href="/admin/database/santri" onClick={() => setIsMobileMenuOpen(false)} className="block px-3 py-2 text-sm rounded-md text-gray-600 hover:text-green-700 hover:bg-yellow-50 transition-colors">
                   Data Alumni Angkatan 25
                 </Link>
+                <Link href="/admin/database/pengurus" onClick={() => setIsMobileMenuOpen(false)} className="block px-3 py-2 text-sm rounded-md text-gray-600 hover:text-green-700 hover:bg-yellow-50 transition-colors">
+                  Data Kepengurusan
+                </Link>
               </div>
             )}
           </div>
