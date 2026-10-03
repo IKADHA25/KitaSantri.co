@@ -53,13 +53,13 @@ export default function Footer() {
           <div>
             <h3 className="text-white font-semibold mb-4 tracking-wide uppercase text-sm">Sekretariat</h3>
             <ul className="space-y-3 text-sm text-gray-400">
-              <li className="flex items-start">
-                <svg className="w-5 h-5 text-gray-500 mr-2 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                <span>Jl. Ulujami Raya No.86, Pesanggrahan, Jakarta Selatan</span>
+              <li className="flex items-center">
+                <svg className="w-5 h-5 text-gray-500 mr-2 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
+                <a href="https://instagram.com/kitasantri.co" target="_blank" rel="noreferrer" className="hover:text-green-400 transition-colors">@kitasantri.co</a>
               </li>
               <li className="flex items-center">
                 <svg className="w-5 h-5 text-gray-500 mr-2 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-                <a href="mailto:info@ikadha25.co" className="hover:text-green-400 transition-colors">info@ikadha25.co</a>
+                <a href="mailto:ikadha25@gmail.com" className="hover:text-green-400 transition-colors">ikadha25@gmail.com</a>
               </li>
             </ul>
           </div>
@@ -72,7 +72,7 @@ export default function Footer() {
             &copy; {new Date().getFullYear()} IKADHA 25. Hak cipta dilindungi.
           </p>
           <div className="mt-4 md:mt-0 flex space-x-4 text-sm text-gray-500">
-            <span>Berdiri sejak 2026</span>
+            <span>Berdiri sejak 2025</span>
           </div>
         </div>
       </div>
